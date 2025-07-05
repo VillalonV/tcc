@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BusTrack - Monitoramento de Ônibus Araraquara</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places"></script>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f5f5f5;
+        }
+        .bus-marker {
+            background-color: #4F46E5;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 50%;
+            font-weight: bold;
+            border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .slide-up {
+            animation: slideUp 0.3s ease-out forwards;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="relative overflow-hidden">
+    <!-- Login Modal -->
+    <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 slide-up">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-indigo-600">Login / Cadastro</h2>
+                <button id="closeLoginModal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 mb-2">E-mail</label>
+                <input type="email" placeholder="seu@email.com" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <div class="mb-6">
+                <label class="block text-gray-700 mb-2">Senha</label>
+                <input type="password" placeholder="••••••••" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <button class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors mb-4">Entrar</button>
+            <div class="text-center">
+                <p class="text-gray-600">Não tem conta? <button id="switchToRegister" class="text-indigo-600 font-semibold">Cadastre-se</button></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recharge Modal -->
+    <div id="rechargeModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 slide-up">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-indigo-600">Recarga de Passe</h2>
+                <button id="closeRechargeModal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 mb-2">Valor</label>
+                <select class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    <option>Selecione um valor</option>
+                    <option>R$ 5,00</option>
+                    <option>R$ 10,00</option>
+                    <option>R$ 20,00</option>
+                    <option>R$ 50,00</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 mb-2">Forma de Pagamento</label>
+                <div class="grid grid-cols-2 gap-4 mb-2">
+                    <button class="p-3 border rounded-lg flex items-center justify-center hover:border-indigo-500">
+                        <i class="fab fa-cc-visa text-blue-800 mr-2"></i>
+                        <span>Cartão</span>
+                    </button>
+                    <button class="p-3 border rounded-lg flex items-center justify-center hover:border-indigo-500">
+                        <i class="fab fa-pix text-green-600 mr-2"></i>
+                        <span>PIX</span>
+                    </button>
+                </div>
+            </div>
+            <button class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors mb-4">Concluir Recarga</button>
+        </div>
+    </div>
+
+    <!-- App Container -->
+    <div class="flex flex-col h-screen">
+        <!-- Header -->
+        <header class="bg-indigo-600 text-white p-4 shadow-md">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center">
+                    <img src="https://placehold.co/40x40" alt="Ícone do BusTrack - ônibus estilizado na cor branca sobre fundo azul" class="mr-2 rounded-full">
+                    <h1 class="text-xl font-bold">BusTrack Araraquara</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="loginButton" class="bg-white text-indigo-600 px-4 py-1 rounded-full font-medium">Login</button>
+                </div>
+            </div>
+            <div class="mt-4 relative">
+                <input type="text" placeholder="Busque por linhas ou pontos..." class="w-full p-3 pl-10 rounded-full text-gray-800 focus:ring-indigo-500 focus:border-indigo-500" id="searchInput">
+                <i class="fas fa-search absolute left-3 top-3.5 text-gray-500"></i>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex overflow-hidden">
+            <!-- Map Section -->
+            <div class="flex-1 relative">
+                <div id="map" class="h-full w-full"></div>
+                
+                <!-- Map Controls -->
+                <div class="absolute top-4 right-4 space-y-2">
+                    <button class="bg-white p-2 rounded-full shadow-lg hover:bg-gray-100">
+                        <i class="fas fa-crosshairs text-indigo-600"></i>
+                    </button>
+                    <button class="bg-white p-2 rounded-full shadow-lg hover:bg-gray-100">
+                        <i class="fas fa-layer-group text-indigo-600"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="w-80 bg-white shadow-lg overflow-y-auto transform translate-x-0 transition-transform duration-300 ease-in-out" id="sidebar">
+                <div class="p-4">
+                    <button id="closeSidebar" class="text-gray-500 hover:text-gray-700 float-right lg:hidden">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    
+                    <div class="mb-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-2">Linhas Disponíveis</h2>
+                        <div class="space-y-3">
+                            <div class="p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 cursor-pointer">
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-indigo-700">120 - Vila Xavier</span>
+                                    <span class="text-sm text-gray-600">6 min</span>
+                                </div>
+                                <div class="text-sm text-gray-700">Terminal → Centro → Vila Xavier</div>
+                            </div>
+                            
+                            <div class="p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 cursor-pointer">
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-indigo-700">140 - Jardim Santa Lúcia</span>
+                                    <span class="text-sm text-gray-600">10 min</span>
+                                </div>
+                                <div class="text-sm text-gray-700">Terminal → Centro → Santa Lúcia</div>
+                            </div>
+                            
+                            <div class="p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 cursor-pointer">
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-indigo-700">160 - Selmi Dei</span>
+                                    <span class="text-sm text-gray-600">15 min</span>
+                                </div>
+                                <div class="text-sm text-gray-700">Terminal → Selmi Dei → Hospital</div>
+                            </div>
+                            
+                            <div class="p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 cursor-pointer">
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-indigo-700">180 - Jardim Paulistano</span>
+                                    <span class="text-sm text-gray-600">8 min</span>
+                                </div>
+                                <div class="text-sm text-gray-700">Terminal → Paulistano → USP</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-2">Seu Passe</h2>
+                        <div class="bg-indigo-100 p-4 rounded-lg text-center">
+                            <div class="text-indigo-800 mb-2">
+                                <i class="fas fa-bus text-3xl"></i>
+                            </div>
+                            <h3 class="font-bold text-gray-800 mb-1">Passe Municipal</h3>
+                            <p class="text-sm text-gray-700 mb-3">Validade: 30/12/2023</p>
+                            <p class="text-2xl font-bold text-indigo-600">R$ 12,50</p>
+                            <button id="rechargeButton" class="mt-3 bg-indigo-600 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-indigo-700 transition-colors">Recarregar</button>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-2">Histórico</h2>
+                        <div class="space-y-3">
+                            <div class="p-3 border rounded-lg">
+                                <div class="flex justify-between">
+                                    <span class="font-medium">RECARGA</span>
+                                    <span class="text-sm text-gray-600">10/11/2023</span>
+                                </div>
+                                <div class="text-sm text-gray-700">+ R$ 20,00</div>
+                            </div>
+                            <div class="p-3 border rounded-lg">
+                                <div class="flex justify-between">
+                                    <span class="font-medium">VIAGEM</span>
+                                    <span class="text-sm text-gray-600">08/11/2023</span>
+                                </div>
+                                <div class="text-sm text-gray-700">Linha 140 - R$ 4,50</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile Bottom Navigation -->
+    <div class="fixed bottom-0 left-0 right-0 bg-white shadow-lg flex justify-around items-center p-3 lg:hidden" id="mobileNav">
+        <button class="flex flex-col items-center text-indigo-600">
+            <i class="fas fa-map-marker-alt mb-1"></i>
+            <span class="text-xs">Mapa</span>
+        </button>
+        <button onclick="toggleSidebar()" class="flex flex-col items-center text-gray-600">
+            <i class="fas fa-bus mb-1"></i>
+            <span class="text-xs">Linhas</span>
+        </button>
+        <button id="mobileRechargeButton" class="flex flex-col items-center text-gray-600">
+            <i class="fas fa-wallet mb-1"></i>
+            <span class="text-xs">Recarga</span>
+        </button>
+        <button class="flex flex-col items-center text-gray-600">
+            <i class="fas fa-user mb-1"></i>
+            <span class="text-xs">Conta</span>
+        </button>
+    </div>
+
+    <script>
+        // Inicialização do mapa
+        function initMap() {
+            // Coordenadas de Araraquara-SP
+            const araraquara = { lat: -21.7933, lng: -48.1750 };
+            
+            // Configurações do mapa
+            const map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 13,
+                center: araraquara,
+                styles: [
+                    {
+                        "featureType": "poi",
+                        "stylers": [{ "visibility": "off" }]
+                    },
+                    {
+                        "featureType": "transit.station",
+                        "stylers": [{ "visibility": "on" }]
+                    }
+                ]
+            });
+
+            // Adicionar marcadores simulados de ônibus (em produção seriam dados em tempo real)
+            const busRoutes = [
+                { id: 1, lat: -21.8000, lng: -48.1800, line: "120 - Vila Xavier", speed: 40 },
+                { id: 2, lat: -21.7900, lng: -48.1700, line: "140 - Santa Lúcia", speed: 35 },
+                { id: 3, lat: -21.7850, lng: -48.1650, line: "160 - Selmi Dei", speed: 25 },
+                { id: 4, lat: -21.7750, lng: -48.1750, line: "180 - Paulistano", speed: 50 }
+            ];
+
+            // Criar marcadores para cada ônibus
+            busRoutes.forEach(bus => {
+                const marker = new google.maps.Marker({
+                    position: { lat: bus.lat, lng: bus.lng },
+                    map: map,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: "#4F46E5",
+                        fillOpacity: 1,
+                        strokeColor: "white",
+                        strokeWeight: 2
+                    },
+                    title: bus.line
+                });
+                
+                // Adicionar evento de clique para mostrar informações do ônibus
+                marker.addListener("click", () => {
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: `
+                            <div class="text-sm">
+                                <strong>${bus.line}</strong><br>
+                                Velocidade: ${bus.speed} km/h<br>
+                                Próxima parada: Praça Santa Cruz (2 min)
+                            </div>
+                        `
+                    });
+                    infoWindow.open(map, marker);
+                });
+            });
+
+            // Adicionar marcador para o usuário
+            new google.maps.Marker({
+                position: araraquara,
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: "#10B981",
+                    fillOpacity: 1,
+                    strokeColor: "white",
+                    strokeWeight: 2
+                },
+                title: "Sua localização"
+            });
+        }
+
+        // Controladores da UI
+        document.addEventListener('DOMContentLoaded', function() {
+            // Eventos de login
+            document.getElementById('loginButton').addEventListener('click', () => {
+                document.getElementById('loginModal').classList.remove('hidden');
+            });
+            
+            document.getElementById('closeLoginModal').addEventListener('click', () => {
+                document.getElementById('loginModal').classList.add('hidden');
+            });
+
+            // Eventos de recarga
+            document.getElementById('rechargeButton').addEventListener('click', () => {
+                document.getElementById('rechargeModal').classList.remove('hidden');
+            });
+            
+            document.getElementById('mobileRechargeButton').addEventListener('click', () => {
+                document.getElementById('rechargeModal').classList.remove('hidden');
+            });
+            
+            document.getElementById('closeRechargeModal').addEventListener('click', () => {
+                document.getElementById('rechargeModal').classList.add('hidden');
+            });
+
+            // Alternar entre cadastro/login
+            document.getElementById('switchToRegister').addEventListener('click', () => {
+                alert('Funcionalidade de cadastro será implementada aqui');
+            });
+
+            // Controlar sidebar em mobile
+            function toggleSidebar() {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.toggle('translate-x-full');
+            }
+
+            document.getElementById('closeSidebar').addEventListener('click', toggleSidebar);
+            
+            // Evento para abrir sidebar em mobile
+            document.querySelectorAll('#mobileNav button:nth-child(2)').forEach(btn => {
+                btn.addEventListener('click', toggleSidebar);
+            });
+        });
+
+        // Inicializar o mapa após o carregamento da API do Google
+        window.onload = initMap;
+    </script>
+</body>
+</html>
